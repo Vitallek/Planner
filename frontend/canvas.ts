@@ -1,27 +1,60 @@
 const canvasElement = document.getElementById('canvas');
 const resizeCanvas = () => {
+  //@ts-ignore
   canvasElement.width = window.innerWidth;
+  //@ts-ignore
   canvasElement.height = window.innerHeight;
 }
 resizeCanvas();
 window.addEventListener('resize', event => {
   resizeCanvas();
 })
+interface NodeR {
+  x: number,
+  y: number,
+  center: {
+    x: number,
+    y: number
+  },
+  width: number,
+  height: number,
+  selected: boolean,
+  id: number,
+  startForWires: number[],
+  endForWires: number[]
+};
+interface Wire {
+  id: number,
+  selected: boolean,
+  startNode: {
+    id: number,
+    x: number,
+    y: number
+  },
+  endNode: {
+    id: number,
+    x: number,
+    y: number
+  }
+}
 const nodeActionsElement = document.getElementById('node_actions');
 const rectW = 100;
 const rectWhalf = rectW / 2;
 const rectH = 70;
 const rectHhalf = rectH / 2;
 let zoom = 1;
-let rectangles = [];
-let selectedRect = null;
+let rectangles: Array<NodeR> = [];
+let wires: Array<Wire> = [];
+let selectedRect: NodeR = null;
+let selectedWire: Wire = null;
 let selectedOffsetX,
-selectedOffsetY,
-initMouseX,
-initMouseY,
-canvDragInitX,
-canvDragInitY;
+  selectedOffsetY,
+  initMouseX,
+  initMouseY,
+  canvDragInitX,
+  canvDragInitY;
 let isDragging = false;
+let isWiring = false;
 let actionsMenuTimeout;
 const closeActionMenu = () => {
   nodeActionsElement.style.display = 'none';
@@ -32,45 +65,52 @@ const openActionMenu = () => {
   nodeActionsElement.style.left = `${initMouseX}px`;
   nodeActionsElement.style.top = `${initMouseY}px`;
 }
+let matrix=[1,0,0,1,0,0];
+const toCanvasCoords = (mouseX, mouseY) => {
+  let x = (mouseX - matrix[4]) / matrix[0];
+  let y = (mouseY - matrix[5]) / matrix[3];
+  return {x,y}
+}
+const toScreenCoords = (mouseX, mouseY) => {
+  let x = mouseX * matrix[0] + mouseY * matrix[2] + matrix[4];
+  let y = mouseX * matrix[1] + mouseY * matrix[3] + matrix[5];
+  return {x,y};
+}
 
+const findNodeIndex = (mouseX, mouseY) => {
+  const converted = toCanvasCoords(mouseX, mouseY);
+  const x = converted.x;
+  const y = converted.y;
+  return rectangles.findIndex(rect =>
+    x > rect.x &&
+    x < rect.x + rectW &&
+    y > rect.y &&
+    y < rect.y + rectH
+  );
+}
+const findWireIndex = (mouseX, mouseY) => {
+  const converted = toCanvasCoords(mouseX, mouseY);
+  const x = converted.x;
+  const y = converted.y;
+  // return wires.findIndex(wire => wire.contains(x, y));
+}
+
+//@ts-ignore
 CanvasKitInit({
-  locateFile: (file) => '/node_modules/canvaskit-wasm/bin/' + file,
+  locateFile: (file) => '/frontend/node_modules/canvaskit-wasm/bin/' + file,
 }).then(CanvasKit => {
   const surface = CanvasKit.MakeWebGLCanvasSurface(canvasElement);
   const canvas = surface.getCanvas();
   // an array representing the canvas affine transformation matrix 
-  let matrix=[1,0,0,1,0,0];
   
   const paint = new CanvasKit.Paint();
   paint.setColor(CanvasKit.Color(233, 214, 192, 1));
 
-  const toCanvasCoords = (mouseX, mouseY) => {
-    let x = (mouseX - matrix[4]) / matrix[0];
-    let y = (mouseY - matrix[5]) / matrix[3];
-    return {x,y}
-  }
-  const toScreenCoords = (mouseX, mouseY) => {
-    let x = mouseX * matrix[0] + mouseY * matrix[2] + matrix[4];
-    let y = mouseX * matrix[1] + mouseY * matrix[3] + matrix[5];
-    return {x,y};
-  }
-
-  const findNodeIndex = (mouseX, mouseY) => {
-    const converted = toCanvasCoords(mouseX, mouseY);
-    const x = converted.x;
-    const y = converted.y;
-    return rectangles.findIndex(rect =>
-      x > rect.x &&
-      x < rect.x + rectW &&
-      y > rect.y &&
-      y < rect.y + rectH
-    );
-  }
   function addNode(mouseX, mouseY) {
     const converted = toCanvasCoords(mouseX, mouseY);
     const x = converted.x - canvasElement.offsetLeft;
     const y = converted.y - canvasElement.offsetTop;
-    const rect = {
+    const rect: NodeR = {
       x: x - rectWhalf,
       y: y - rectHhalf,
       center: {
@@ -80,23 +120,73 @@ CanvasKitInit({
       width: rectW,
       height: rectH,
       selected: false,
+      id: rectangles.length,
+      startForWires: [],
+      endForWires: []
     };
     rectangles.push(rect);
     console.log(matrix, mouseX, mouseY, zoom, rectangles)
-    
   }
+
+  function addWire(rect1: NodeR, mouseX, mouseY) {
+    const converted = toCanvasCoords(mouseX, mouseY);
+    const x = converted.x - canvasElement.offsetLeft;
+    const y = converted.y - canvasElement.offsetTop;
+    const wireID = wires.length;
+    const wire: Wire = {
+      id: wireID,
+      selected: false,
+      startNode: {
+        id: rect1.id,
+        x: rect1.center.x,
+        y: rect1.center.y
+      },
+      endNode: {
+        id: null,
+        x: x,
+        y: y
+      }
+    };
+    rect1.startForWires.push(wireID);
+    wires.push(wire);
+    console.log(matrix, mouseX, mouseY, zoom, wires);
+    return wires.length - 1;
+  }
+
   function draw() {
     canvas.clear(CanvasKit.TRANSPARENT);
-    rectangles.forEach(rect => {
+    rectangles.forEach((rect, index) => {
       canvas.drawRRect(CanvasKit.RRectXY(CanvasKit.XYWHRect(rect.x, rect.y, rect.width, rect.height), 14, 14), paint);
+      if(wires.length > 0 && wires[index]) {
+        const wireStart = wires[index].startNode;
+        const wireEnd = wires[index].endNode;
+        drawWire(wireStart.x, wireStart.y, wireStart.x, wireStart.y, wireEnd.x, wireEnd.y, wireEnd.x, wireEnd.y);
+      }
     });
     surface.flush();
   }
 
+  function drawWire(startX, startY, controlX1, controlY1, controlX2, controlY2, endX, endY) {
+    const path = new CanvasKit.Path();
+    paint.setStyle(CanvasKit.PaintStyle.Stroke);
+    path.moveTo(startX, startY);
+    path.cubicTo(controlX1, controlY1, controlX2, controlY2, endX, endY);
+    canvas.drawPath(path, paint);
+    paint.setStyle(CanvasKit.PaintStyle.Fill);
+  }
   const deleteNodeBtn = document.getElementById('deleteNode');
   deleteNodeBtn.onclick = (event) => {
     rectangles.splice(findNodeIndex(initMouseX, initMouseY), 1);
     closeActionMenu();
+    draw();
+  }
+
+  const wireNodeBtn = document.getElementById('wireNode');
+  wireNodeBtn.onclick = (event) => {
+    closeActionMenu();
+    isWiring = true;
+    const newWireIndex = addWire(selectedRect, event.clientX, event.clientY);
+    selectedWire = wires[newWireIndex];
     draw();
   }
 
@@ -115,7 +205,6 @@ CanvasKitInit({
     matrix[4] += matrix[0] * -pt.x + matrix[2] * -pt.y;
     matrix[5] += matrix[1] * -pt.x + matrix[3] * -pt.y;
     ctx.translate(-pt.x, -pt.y);
-    console.log(matrix)
   }
   canvasElement.addEventListener('wheel', event => {
     event.preventDefault();
@@ -135,13 +224,13 @@ CanvasKitInit({
     const x = event.clientX - canvasElement.offsetLeft;
     const y = event.clientY - canvasElement.offsetTop;
     selectedRect = rectangles[findNodeIndex(x, y)]
-
     isDragging = true;
     if (selectedRect) {
+      selectedRect.selected = true;
       actionsMenuTimeout = setTimeout(() => {
         openActionMenu();
         return;
-      }, 1000)
+      }, 500)
       const versa = toScreenCoords(selectedRect.x, selectedRect.y);
       selectedOffsetX = x - versa.x;
       selectedOffsetY = y - versa.y;
@@ -153,15 +242,30 @@ CanvasKitInit({
     clearTimeout(actionsMenuTimeout);
     const x = event.clientX - canvasElement.offsetLeft;
     const y = event.clientY - canvasElement.offsetTop;
+    
+    if(isWiring) {
+      const converted = toCanvasCoords(x, y);
+      selectedWire.endNode.x = converted.x - canvasElement.offsetLeft;
+      selectedWire.endNode.y = converted.y - canvasElement.offsetTop;
+    }
     if (selectedRect && isDragging) {
-      /** перетаскивается нода */
+      /** перетаскивается нода*/
       const converted = toCanvasCoords(x - selectedOffsetX, y - selectedOffsetY);
-      
       selectedRect.x = converted.x;
       selectedRect.y = converted.y;
-      selectedRect.center.x = converted.x;
-      selectedRect.center.y = converted.y;
-      console.log(selectedRect)
+      selectedRect.center.x = converted.x + rectWhalf;
+      selectedRect.center.y = converted.y + rectHhalf;
+      selectedRect.startForWires.forEach(wireIndex => {
+        const wire = wires[wireIndex];
+        wire.startNode.x = converted.x + rectWhalf;
+        wire.startNode.y = converted.y + rectHhalf;
+      })
+      selectedRect.endForWires.forEach(wireIndex => {
+        const wire = wires[wireIndex];
+        wire.endNode.x = converted.x + rectWhalf;
+        wire.endNode.y = converted.y + rectHhalf;
+      })
+      console.log(rectangles, wires)
     }
     if(!selectedRect && isDragging) {
       /**перетаскивается экран */
@@ -182,14 +286,23 @@ CanvasKitInit({
   });
 
   canvasElement.addEventListener('mouseup', (event) => {
-    clearTimeout(actionsMenuTimeout)
+    clearTimeout(actionsMenuTimeout);
     isDragging = false;
-
-    if (!selectedRect && initMouseX == event.clientX && initMouseY == event.clientY) {
+    if(isWiring && selectedRect){
+      selectedWire.endNode.x = selectedRect.center.x;
+      selectedWire.endNode.y = selectedRect.center.y;
+      selectedWire.endNode.id = selectedRect.id;
+      selectedRect.endForWires.push(selectedWire.id);
+      isWiring = false;
+      return;
+    }
+    if (!isWiring && !selectedRect && initMouseX == event.clientX && initMouseY == event.clientY) {
       addNode(event.clientX, event.clientY);
       draw();
     }
-
+    // if(selectedRect) {
+    //   selectedRect.selected = false;
+    // }
   });
 
   function trackTransforms(ctx) {
