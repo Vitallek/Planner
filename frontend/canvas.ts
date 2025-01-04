@@ -38,9 +38,10 @@ interface Wire {
   }
 }
 const nodeActionsElement = document.getElementById('node_actions');
-const rectW = 100;
+const rectStroke = 5;
+const rectW = 200;
 const rectWhalf = rectW / 2;
-const rectH = 70;
+const rectH = 140;
 const rectHhalf = rectH / 2;
 let zoom = 1;
 let rectangles: Array<NodeR> = [];
@@ -104,6 +105,7 @@ CanvasKitInit({
   // an array representing the canvas affine transformation matrix 
   
   const paint = new CanvasKit.Paint();
+  paint.setAntiAlias(true);
   paint.setColor(CanvasKit.Color(233, 214, 192, 1));
 
   function addNode(mouseX, mouseY) {
@@ -155,13 +157,16 @@ CanvasKitInit({
 
   function draw() {
     canvas.clear(CanvasKit.TRANSPARENT);
-    rectangles.forEach((rect, index) => {
+    wires.forEach(wire => {
+      const wireStart = wire.startNode;
+      const wireEnd = wire.endNode;
+      drawWire(wireStart.x, wireStart.y, wireStart.x, wireStart.y, wireEnd.x, wireEnd.y, wireEnd.x, wireEnd.y);
+    })
+    rectangles.forEach(rect => {
+      paint.setColor(CanvasKit.Color(46, 49, 54, 1));
+      canvas.drawRRect(CanvasKit.RRectXY(CanvasKit.XYWHRect(rect.x - rectStroke, rect.y - rectStroke, rect.width + 2 * rectStroke, rect.height + 2 * rectStroke), 14, 14), paint);
+      paint.setColor(CanvasKit.Color(233, 214, 192, 1));
       canvas.drawRRect(CanvasKit.RRectXY(CanvasKit.XYWHRect(rect.x, rect.y, rect.width, rect.height), 14, 14), paint);
-      if(wires.length > 0 && wires[index]) {
-        const wireStart = wires[index].startNode;
-        const wireEnd = wires[index].endNode;
-        drawWire(wireStart.x, wireStart.y, wireStart.x, wireStart.y, wireEnd.x, wireEnd.y, wireEnd.x, wireEnd.y);
-      }
     });
     surface.flush();
   }
@@ -169,6 +174,7 @@ CanvasKitInit({
   function drawWire(startX, startY, controlX1, controlY1, controlX2, controlY2, endX, endY) {
     const path = new CanvasKit.Path();
     paint.setStyle(CanvasKit.PaintStyle.Stroke);
+    paint.setStrokeWidth(5);
     path.moveTo(startX, startY);
     path.cubicTo(controlX1, controlY1, controlX2, controlY2, endX, endY);
     canvas.drawPath(path, paint);
@@ -251,10 +257,6 @@ CanvasKitInit({
     if (selectedRect && isDragging) {
       /** перетаскивается нода*/
       const converted = toCanvasCoords(x - selectedOffsetX, y - selectedOffsetY);
-      selectedRect.x = converted.x;
-      selectedRect.y = converted.y;
-      selectedRect.center.x = converted.x + rectWhalf;
-      selectedRect.center.y = converted.y + rectHhalf;
       selectedRect.startForWires.forEach(wireIndex => {
         const wire = wires[wireIndex];
         wire.startNode.x = converted.x + rectWhalf;
@@ -265,6 +267,11 @@ CanvasKitInit({
         wire.endNode.x = converted.x + rectWhalf;
         wire.endNode.y = converted.y + rectHhalf;
       })
+      selectedRect.x = converted.x;
+      selectedRect.y = converted.y;
+      selectedRect.center.x = converted.x + rectWhalf;
+      selectedRect.center.y = converted.y + rectHhalf;
+
       console.log(rectangles, wires)
     }
     if(!selectedRect && isDragging) {
@@ -294,6 +301,7 @@ CanvasKitInit({
       selectedWire.endNode.id = selectedRect.id;
       selectedRect.endForWires.push(selectedWire.id);
       isWiring = false;
+      draw();
       return;
     }
     if (!isWiring && !selectedRect && initMouseX == event.clientX && initMouseY == event.clientY) {
