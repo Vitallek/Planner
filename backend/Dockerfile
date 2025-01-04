@@ -13,10 +13,12 @@ RUN apt-get update && \
     apt-get -y install netcat-traditional && \
     apt-get clean
 
+# install pipenv
+RUN pip install pipenv
+
 # install dependencies
-RUN pip install --upgrade pip
-COPY ./requirements.txt .
-RUN pip install -r requirements.txt
+COPY Pipfile Pipfile.lock ${WORKDIR}
+RUN pipenv install --system --deploy
 
 # copy entrypoint.sh
 COPY ./entrypoint.sh .
