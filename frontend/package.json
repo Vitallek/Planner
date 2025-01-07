@@ -1,0 +1,9 @@
+{
+  "dependencies": {
+    "canvaskit-wasm": "^0.39.1",
+    "typescript": "^5.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.5"
+  }
+}
