@@ -53,18 +53,18 @@ let wireIDCounter = 10;
 let zoom = 1;
 let rectangles: Array<NodeR> = [];
 let wires: Array<Wire> = [];
-let selectedRect: NodeR = null;
-let selectedRectPrev: NodeR = null;
-let selectedWire: Wire = null;
-let selectedOffsetX,
-  selectedOffsetY,
-  initMouseX,
-  initMouseY,
-  canvDragInitX,
-  canvDragInitY;
+let selectedRect: NodeR | null = null;
+let selectedRectPrev: NodeR | null = null;
+let selectedWire: Wire | null = null;
+let selectedOffsetX: number,
+  selectedOffsetY : number,
+  initMouseX : number,
+  initMouseY : number,
+  canvDragInitX : number,
+  canvDragInitY : number;
 let isDragging = false;
 let isWiring = false;
-let actionsMenuTimeout;
+let actionsMenuTimeout: ReturnType<typeof setTimeout>;
 
 const closeActionMenu = () => {
   nodeActionsElement.style.display = 'none';
@@ -129,7 +129,7 @@ CanvasKitInit({
   const roboto = CanvasKit.Typeface.MakeFreeTypeFaceFromData(fontData);
   const font = new CanvasKit.Font(roboto, 54);
 
-  function addNode(mouseX, mouseY) {
+  function addNode(mouseX: number, mouseY: number) {
     const converted = toCanvasCoords(mouseX, mouseY);
     const x = converted.x - canvasElement.offsetLeft;
     const y = converted.y - canvasElement.offsetTop;
@@ -327,8 +327,8 @@ CanvasKitInit({
     }
     if(!selectedRect && isDragging) {
       /**перетаскивается экран */
-      const movementX = x - canvDragInitX;
-      const movementY = y - canvDragInitY;
+      const movementX = (x - canvDragInitX)/matrix[0];
+      const movementY = (y - canvDragInitY)/matrix[3];
       // const movement = Math.sqrt(movementX*movementX+movementY*movementY);
       matrix[4] += matrix[0] * movementX + matrix[2] * movementY;
       matrix[5] += matrix[1] * movementX + matrix[3] * movementY;
